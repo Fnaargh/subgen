@@ -626,42 +626,57 @@ async def asr(
         await audio_file.close()
         task_queue.task_done()
         delete_model()
-    # right before result.to_srt_vtt(...)
-    if os.getenv('SUBGEN_MERGE_SHORT_SUBS', 'false').lower() == 'true':
-      merged_words = []
-      min_duration = 0.6  # seconds, tweak this as needed
-      buffer = []
+    # -----------------------------
+    # Merge short words globally across segments (faster-whisper)
+    # Place this **after delete_model() but before result.to_srt_vtt()**
+    # -----------------------------
+    if os.getenv('SUBGEN_MERGE_SHORT_SUBS', 'false').lower() == 'true' and result.segments:
+        min_duration = 0.6  # seconds, tweak as needed
+        gap_threshold = 0.2  # seconds
     
-      for w in result.words:
-          if not buffer:
-              buffer.append(w)
-              continue
+        # Flatten all words across segments
+        all_words = []
+        for seg in result.segments:
+            if hasattr(seg, 'words') and seg.words:
+                all_words.extend(seg.words)
     
-          # Check the gap between previous and current word
-          gap = w.start - buffer[-1].end
-          duration = buffer[-1].end - buffer[0].start
+        if all_words:
+            merged_words = []
+            buffer = []
     
-          # merge if the line is short or gap is tiny
-          if duration < min_duration or gap < 0.2:
-              buffer.append(w)
-          else:
-              merged_words.append({
-                  "start": buffer[0].start,
-                  "end": buffer[-1].end,
-                  "text": " ".join(x.word for x in buffer)
-              })
-              buffer = [w]
+            for w in all_words:
+                if not buffer:
+                    buffer.append(w)
+                    continue
     
-      # Add last one
-      if buffer:
-          merged_words.append({
-              "start": buffer[0].start,
-              "end": buffer[-1].end,
-              "text": " ".join(x.word for x in buffer)
-          })
+                gap = w.start - buffer[-1].end
+                duration = buffer[-1].end - buffer[0].start
     
-      # Replace the internal word list
-      result.words = merged_words
+                if duration < min_duration or gap < gap_threshold:
+                    buffer.append(w)
+                else:
+                    merged_words.append({
+                        "start": buffer[0].start,
+                        "end": buffer[-1].end,
+                        "word": " ".join(x.word for x in buffer)
+                    })
+                    buffer = [w]
+    
+            if buffer:
+                merged_words.append({
+                    "start": buffer[0].start,
+                    "end": buffer[-1].end,
+                    "word": " ".join(x.word for x in buffer)
+                })
+    
+            # Create a single merged segment for compatibility with to_srt_vtt
+            merged_segment = result.segments[0]
+            merged_segment.words = merged_words
+            merged_segment.start = merged_words[0]["start"]
+            merged_segment.end = merged_words[-1]["end"]
+            merged_segment.text = " ".join(w["word"] for w in merged_words)
+            result.segments = [merged_segment]
+
 
     if result:
         return StreamingResponse(
@@ -930,6 +945,57 @@ def gen_subtitles(file_path: str, transcription_type: str, force_language : Lang
 
         args['word_timestamps'] = os.getenv('WHISPER_WORD_TIMESTAMPS', 'False').lower() == 'true'
         result = model.transcribe(data, language=force_language.to_iso_639_1(), task=transcription_type, **args)
+
+        # -----------------------------
+        # Merge short words globally across segments (faster-whisper)
+        # Place this **after delete_model() but before result.to_srt_vtt()**
+        # -----------------------------
+        if os.getenv('SUBGEN_MERGE_SHORT_SUBS', 'false').lower() == 'true' and result.segments:
+            min_duration = 0.6  # seconds, tweak as needed
+            gap_threshold = 0.2  # seconds
+        
+            # Flatten all words across segments
+            all_words = []
+            for seg in result.segments:
+                if hasattr(seg, 'words') and seg.words:
+                    all_words.extend(seg.words)
+        
+            if all_words:
+                merged_words = []
+                buffer = []
+        
+                for w in all_words:
+                    if not buffer:
+                        buffer.append(w)
+                        continue
+        
+                    gap = w.start - buffer[-1].end
+                    duration = buffer[-1].end - buffer[0].start
+        
+                    if duration < min_duration or gap < gap_threshold:
+                        buffer.append(w)
+                    else:
+                        merged_words.append({
+                            "start": buffer[0].start,
+                            "end": buffer[-1].end,
+                            "word": " ".join(x.word for x in buffer)
+                        })
+                        buffer = [w]
+        
+                if buffer:
+                    merged_words.append({
+                        "start": buffer[0].start,
+                        "end": buffer[-1].end,
+                        "word": " ".join(x.word for x in buffer)
+                    })
+        
+                # Create a single merged segment for compatibility with to_srt_vtt
+                merged_segment = result.segments[0]
+                merged_segment.words = merged_words
+                merged_segment.start = merged_words[0]["start"]
+                merged_segment.end = merged_words[-1]["end"]
+                merged_segment.text = " ".join(w["word"] for w in merged_words)
+                result.segments = [merged_segment]
 
         appendLine(result)
 
