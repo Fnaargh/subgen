@@ -77,6 +77,44 @@ import torch
 from typing import List
 from enum import Enum
 
+# Merge word-level timestamps into longer subtitle lines
+def merge_short_words(result, min_duration=1.5):
+    # Only run if explicitly enabled
+    if os.getenv('WHISPER_WORD_TIMESTAMPS', 'false').lower() != 'true':
+        return None
+
+    merged = []
+    buffer = []
+    line_start = None
+
+    for w in result.words:
+        if line_start is None:
+            line_start = w.start
+        buffer.append(w)
+        line_end = w.end
+
+        # Once the line hits min_duration, wrap it up
+        if (line_end - line_start) >= min_duration:
+            merged.append(buffer)
+            buffer = []
+            line_start = None
+
+    # Catch any leftover words
+    if buffer:
+        merged.append(buffer)
+
+    # Convert grouped words into the same structure Subgen expects
+    merged_result = []
+    for group in merged:
+        merged_result.append({
+            "start": group[0].start,
+            "end": group[-1].end,
+            "word": " ".join(getattr(w, "word", getattr(w, "text", "")) for w in group)
+        })
+
+    return merged_result
+
+
 def convert_to_bool(in_bool):
     # Convert the input to string and lower case, then check against true values
     return str(in_bool).lower() in ('true', 'on', '1', 'y', 'yes')
@@ -588,7 +626,43 @@ async def asr(
         await audio_file.close()
         task_queue.task_done()
         delete_model()
-    
+	# right before result.to_srt_vtt(...)
+	if os.getenv('SUBGEN_MERGE_SHORT_SUBS', 'false').lower() == 'true':
+	    merged_words = []
+	    min_duration = 0.6  # seconds, tweak this as needed
+	    buffer = []
+	
+	    for w in result.words:
+	        if not buffer:
+	            buffer.append(w)
+	            continue
+	
+	        # Check the gap between previous and current word
+	        gap = w.start - buffer[-1].end
+	        duration = buffer[-1].end - buffer[0].start
+	
+	        # merge if the line is short or gap is tiny
+	        if duration < min_duration or gap < 0.2:
+	            buffer.append(w)
+	        else:
+	            merged_words.append({
+	                "start": buffer[0].start,
+	                "end": buffer[-1].end,
+	                "text": " ".join(x.word for x in buffer)
+	            })
+	            buffer = [w]
+	
+	    # Add last one
+	    if buffer:
+	        merged_words.append({
+	            "start": buffer[0].start,
+	            "end": buffer[-1].end,
+	            "text": " ".join(x.word for x in buffer)
+	        })
+	
+	    # Replace the internal word list
+	    result.words = merged_words
+
     if result:
         return StreamingResponse(
             iter(result.to_srt_vtt(filepath=None, word_level=word_level_highlight)),
