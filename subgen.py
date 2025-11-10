@@ -640,6 +640,8 @@ async def asr(
                 self.start = start
                 self.end = end
                 self.word = word
+            def copy(self):
+                return Word(self.start, self.end, self.word)
     
         # Flatten all words across segments
         all_words = []
