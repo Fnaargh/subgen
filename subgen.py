@@ -676,7 +676,6 @@ async def asr(
             merged_segment.words = merged_words
             merged_segment.start = merged_words[0].start
             merged_segment.end = merged_words[-1].end
-            merged_segment.text = " ".join(w.word for w in merged_words)
             result.segments = [merged_segment]
 
 
@@ -999,7 +998,6 @@ def gen_subtitles(file_path: str, transcription_type: str, force_language : Lang
                 merged_segment.words = merged_words
                 merged_segment.start = merged_words[0].start
                 merged_segment.end = merged_words[-1].end
-                merged_segment.text = " ".join(w.word for w in merged_words)
                 result.segments = [merged_segment]
 
 
