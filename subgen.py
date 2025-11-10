@@ -640,7 +640,7 @@ async def asr(
                 self.start = start
                 self.end = end
                 self.word = word
-            def copy(self):
+            def copy(self, **kwargs):
                 return Word(self.start, self.end, self.word)
     
         # Flatten all words across segments
@@ -964,6 +964,8 @@ def gen_subtitles(file_path: str, transcription_type: str, force_language : Lang
                     self.start = start
                     self.end = end
                     self.word = word
+                 def copy(self, **kwargs):
+                     return Word(self.start, self.end, self.word)
         
             # Flatten all words across segments
             all_words = []
