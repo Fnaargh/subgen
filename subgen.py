@@ -626,7 +626,7 @@ async def asr(
         await audio_file.close()
         task_queue.task_done()
         delete_model()
-	# right before result.to_srt_vtt(...)
+    # right before result.to_srt_vtt(...)
     if os.getenv('SUBGEN_MERGE_SHORT_SUBS', 'false').lower() == 'true':
       merged_words = []
       min_duration = 0.6  # seconds, tweak this as needed
