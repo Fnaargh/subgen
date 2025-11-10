@@ -568,6 +568,7 @@ async def asr(
 
         args.update(kwargs)
 
+        args['word_timestamps'] = os.getenv('WHISPER_WORD_TIMESTAMPS', 'False').lower() == 'true'
         result = model.transcribe(task=task, language=language, **args)
         appendLine(result)
 
@@ -852,7 +853,8 @@ def gen_subtitles(file_path: str, transcription_type: str, force_language : Lang
             args['regroup'] = custom_regroup
             
         args.update(kwargs)
-        
+
+        args['word_timestamps'] = os.getenv('WHISPER_WORD_TIMESTAMPS', 'False').lower() == 'true'
         result = model.transcribe(data, language=force_language.to_iso_639_1(), task=transcription_type, **args)
 
         appendLine(result)
