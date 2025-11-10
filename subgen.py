@@ -627,41 +627,41 @@ async def asr(
         task_queue.task_done()
         delete_model()
 	# right before result.to_srt_vtt(...)
-	if os.getenv('SUBGEN_MERGE_SHORT_SUBS', 'false').lower() == 'true':
-	    merged_words = []
-	    min_duration = 0.6  # seconds, tweak this as needed
-	    buffer = []
-	
-	    for w in result.words:
-	        if not buffer:
-	            buffer.append(w)
-	            continue
-	
-	        # Check the gap between previous and current word
-	        gap = w.start - buffer[-1].end
-	        duration = buffer[-1].end - buffer[0].start
-	
-	        # merge if the line is short or gap is tiny
-	        if duration < min_duration or gap < 0.2:
-	            buffer.append(w)
-	        else:
-	            merged_words.append({
-	                "start": buffer[0].start,
-	                "end": buffer[-1].end,
-	                "text": " ".join(x.word for x in buffer)
-	            })
-	            buffer = [w]
-	
-	    # Add last one
-	    if buffer:
-	        merged_words.append({
-	            "start": buffer[0].start,
-	            "end": buffer[-1].end,
-	            "text": " ".join(x.word for x in buffer)
-	        })
-	
-	    # Replace the internal word list
-	    result.words = merged_words
+    if os.getenv('SUBGEN_MERGE_SHORT_SUBS', 'false').lower() == 'true':
+      merged_words = []
+      min_duration = 0.6  # seconds, tweak this as needed
+      buffer = []
+    
+      for w in result.words:
+          if not buffer:
+              buffer.append(w)
+              continue
+    
+          # Check the gap between previous and current word
+          gap = w.start - buffer[-1].end
+          duration = buffer[-1].end - buffer[0].start
+    
+          # merge if the line is short or gap is tiny
+          if duration < min_duration or gap < 0.2:
+              buffer.append(w)
+          else:
+              merged_words.append({
+                  "start": buffer[0].start,
+                  "end": buffer[-1].end,
+                  "text": " ".join(x.word for x in buffer)
+              })
+              buffer = [w]
+    
+      # Add last one
+      if buffer:
+          merged_words.append({
+              "start": buffer[0].start,
+              "end": buffer[-1].end,
+              "text": " ".join(x.word for x in buffer)
+          })
+    
+      # Replace the internal word list
+      result.words = merged_words
 
     if result:
         return StreamingResponse(
